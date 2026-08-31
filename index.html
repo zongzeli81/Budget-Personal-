@@ -285,6 +285,10 @@ function spending(d){
         '<button class="x" data-act="del-tx" data-id="'+t.id+'" aria-label="Remove entry">\u00d7</button></div>'
     }).join("");
   }
+  if(d.past&&!d.future&&d.tx.length){
+    h+='<div class="foot" style="text-align:right">'+
+      '<button class="btn danger" data-act="wipe-month" data-mk="'+d.mk+'">Delete all '+mkLabel(d.mk)+' entries</button></div>';
+  }
   return h+'</div>';
 }
 
@@ -398,7 +402,8 @@ function render(){
 
 /* ---------- events ---------- */
 function val(id){var e=document.getElementById(id);return e?e.value:""}
-function num(id){return parseFloat(val(id))||0}
+function toNum(v){v=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,""));return isFinite(v)?v:0}
+function num(id){return toNum(val(id))}
 
 document.addEventListener("click",function(e){
   var el=e.target.closest("[data-act]"); if(!el)return;
@@ -420,6 +425,15 @@ document.addEventListener("click",function(e){
   else if(a==="add-goal"){var gn=val("g-name").trim(),gt=num("g-target");if(!gn||!gt)return;
     S.goals.push({id:uid(),name:gn,target:gt,saved:0});}
   else if(a==="del-goal"){S.goals=S.goals.filter(function(g){return g.id!==id})}
+  else if(a==="wipe-month"){
+    var wmk=el.getAttribute("data-mk");
+    if(!el.getAttribute("data-armed")){
+      el.setAttribute("data-armed","1");el.textContent="Tap again to confirm";
+      setTimeout(function(){if(el.isConnected){el.removeAttribute("data-armed");el.textContent="Delete all "+mkLabel(wmk)+" entries"}},4000);
+      return;
+    }
+    S.transactions=S.transactions.filter(function(t){return t.date.slice(0,7)!==wmk});
+  }
   else if(a==="fund"){var add=num("c-"+id);if(!add)return;
     S.goals=S.goals.map(function(g){if(g.id===id)g.saved=(Number(g.saved)||0)+add;return g});}
   else if(a==="export"){
@@ -442,9 +456,9 @@ document.addEventListener("click",function(e){
 document.addEventListener("input",function(e){
   var el=e.target, kind=el.getAttribute&&el.getAttribute("data-live"); if(!kind)return;
   var id=el.getAttribute("data-id");
-  if(kind==="income")S.income=parseFloat(el.value)||0;
+  if(kind==="income")S.income=toNum(el.value);
   else if(kind==="budget")S.categories=S.categories.map(function(c){
-    if(c.id===id)c.budget=parseFloat(el.value)||0;return c});
+    if(c.id===id)c.budget=toNum(el.value);return c});
   else if(kind==="name")S.categories=S.categories.map(function(c){
     if(c.id===id)c.name=el.value;return c});
   save();
@@ -464,6 +478,14 @@ document.getElementById("file").addEventListener("change",function(e){
     }catch(err){alert("That file isn\u2019t a Ledger backup.")}
   };
   r.readAsText(f); e.target.value="";
+});
+
+var ENTER_MAP={"t-amt":"add-tx","t-note":"add-tx","new-cat":"add-cat","b-name":"add-bill","b-amt":"add-bill","g-name":"add-goal","g-target":"add-goal"};
+document.addEventListener("keydown",function(e){
+  if(e.key!=="Enter")return;
+  var act=e.target&&ENTER_MAP[e.target.id]; if(!act)return;
+  var btn=document.querySelector('[data-act="'+act+'"]');
+  if(btn){e.preventDefault();btn.click();}
 });
 
 /* A home-screen app is frozen, not reloaded. Re-render when it wakes so the
